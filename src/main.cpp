@@ -2,8 +2,10 @@
 
 #include <vulkan/vulkan.hpp>
 #include <GLFW/glfw3.h>
-
 #include <iostream>
+#include <thread>
+
+#include "systems/sound_system.hpp"
 
 int main() {
     vk::detail::DispatchLoaderDynamic default_dispatch_loader_dynamic;
@@ -23,7 +25,7 @@ int main() {
 
     vk::Instance instance;
     if (vk::createInstance(&create_info, nullptr, &instance) != vk::Result::eSuccess) {
-        std::cout << "Failed to create Vulkan instance.\n";
+        std::cout << "Failed to create Vulkan instance\n";
         return -1;
     }
 
@@ -35,22 +37,34 @@ int main() {
     vk::Device device = physical_devices[0].createDevice({}, nullptr);
     default_dispatch_loader_dynamic.init(device);
 
+    using enum elysium::system_t;
+    elysium::system<sound> sound_system{};
+
+    sound_system.load_sound("boing", "assets/sounds/boing.wav");
+    sound_system.adjust_sound_volume("boing", 0.05f);
+
+    std::jthread sound_thread{[&](std::stop_token stop_token) {
+        sound_system.event_loop(stop_token);
+    }};
+
+    sound_system.play_sound("boing");
+
     if (!glfwInit()) {
-        std::cout << "Failed to init glfw.\n";
+        std::cout << "Failed to init glfw\n";
         return -1;
     }
 
     if (glfwPlatformSupported(GLFW_PLATFORM_WAYLAND)) {
         glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
     } else {
-        std::cout << "Platform does not support Wayland.\n";
+        std::cout << "Platform does not support Wayland\n";
         return -1;
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     GLFWwindow* window = glfwCreateWindow(1920, 1080, "Editor", nullptr, nullptr);
     if (!window) {
-        std::cout << "Failed to create window.\n";
+        std::cout << "Failed to create window\n";
         return -1;
     }
 
@@ -59,6 +73,10 @@ int main() {
     while(!glfwWindowShouldClose(window)) {
         glfwSwapBuffers(window);
         glfwPollEvents();
+    }
+
+    if (!sound_thread.request_stop()) {
+        std::cout << "Failed to stop the sound thread\n";
     }
 
     glfwDestroyWindow(window);
